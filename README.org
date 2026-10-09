@@ -1,0 +1,143 @@
+#+TITLE: efzf - Emacs-based Fuzzy Finder for CLI
+#+AUTHOR: Yoshinari Nomura
+#+LANGUAGE: en
+
+* What is efzf?
+
+efzf is a shell script and an Emacs Lisp package that let you use
+Emacs' powerful completion UI (Vertico, Orderless, etc.) in the
+terminal, just like fzf.
+
+efzf invokes emacsclient in the background, opens a temporary UI in
+the terminal, and lets you select an item from standard input or
+from other specified sources.
+
+Example:
+: ps aux | efzf | awk '{print $2}' | xargs kill
+
+efzf:
+#+begin_example
+Usage: efzf [-a action] [-p prompt]
+actions:
+  filter (default): select item from stdin.
+  select: select file in current directory.
+#+end_example
+
+* Files
+
+Currently, this project consists of the following three files:
+
+1) =efzf.el= : Emacs-side core logic and actions
+2) =efzf= : Standalone Bash script
+3) =efzf.zsh= : Example Zsh widget and key binding settings
+
+* Installation and Setup
+** Prerequisites
+
+Since efzf calls Emacs through emacsclient, Emacs must be running as
+a server.  Add the following to your =init.el=, or start Emacs with
+=emacs --daemon=.
+
+#+begin_src elisp
+  (require 'server)
+  (unless (server-running-p)
+    (server-start))
+#+end_src
+
+** Installing the Emacs Lisp package
+
+efzf.el is planned to be submitted to [[https://melpa.org/][MELPA]].  Once it is
+available there, and your package system is set up correctly, you
+can install it with =M-x= =package-install= =efzf=.
+For details, see [[https://github.com/melpa/melpa#usage][MELPA usage]].
+
+Until then, clone this repository and add it to your =load-path=.
+
+#+begin_src elisp
+  (add-to-list 'load-path "/path/to/efzf")
+  (require 'efzf)
+#+end_src
+
+** Installing the CLI commands
+
+Run ~M-x efzf-install-scripts~.  It interactively asks where to copy
+=efzf= and =efzf.zsh=, and copies them there.  The default
+destinations are =~/.local/bin/= and =~/.zsh/=, respectively.
+
+After copying, set up the following:
+
+- Add the directory containing =efzf= to your =PATH=
+- Load =efzf.zsh= from your =.zshrc=
+  #+begin_src shell
+    source ~/.zsh/efzf.zsh
+  #+end_src
+
+After upgrading the package, run ~M-x efzf-install-scripts~ again.
+
+* Usage
+
+** Filtering a list from standard input
+
+You can use it in the same way as =fzf=.
+: ps aux | efzf | awk '{print $2}' | xargs kill
+
+** Filtering information held by Emacs
+
+Instead of reading from a pipe, you can specify an action
+implemented in Emacs.  Currently, the =select= action, which selects
+a file in the current directory, is implemented.  Other possible
+uses include filtering candidates from recentf, project, and so on.
+
+: vim $(efzf -a select)
+
+efzf can also be used as a Zsh widget.
+See the examples in =efzf.zsh=.
+
+For example, here is an implementation of
+history-incremental-search-backward:
+#+begin_src shell
+  efzf-history-incremental-search-backward() {
+    zle -I
+    local selection=$(fc -nlr 1 | awk '!a[$0]++' | efzf) || return
+    BUFFER="$selection"
+    CURSOR=$#BUFFER
+    zle reset-prompt
+  }
+
+  zle -N efzf-history-incremental-search-backward
+  bindkey '^R' efzf-history-incremental-search-backward
+#+end_src
+
+* For Developers
+
+efzf opens =emacsclient -t=, calls =efzf-action-{action}= through
+the =efzf-run-action= function, and prints the result.
+
+For example, to add a feature that selects from files recently
+opened in Emacs, implement the following action.
+This example requires =recentf-mode= to be enabled.
+
+#+begin_src elisp
+  (defun efzf-action-recentf (options)
+    (let ((prompt (or (plist-get options :prompt) "Select file: ")))
+      (condition-case nil
+          (expand-file-name
+           (completing-read prompt recentf-list nil t))
+        (quit nil))))
+#+end_src
+
+Then you can use it as follows:
+: vim $(efzf -a recentf)
+
+An action function runs in, and is expected to behave according to,
+the following environment:
++ The =current-buffer= contains the output from the pipe.
+  Whether to use it is up to the action.
++ =default-directory= is the current directory of efzf.
++ It takes a single plist, =options=, as its argument.
+  + efzf may put action-specific information in it.
++ The function returns a single string or nil.
+
+* License
+
+GPL-3.0-or-later.  See [[file:LICENSE][LICENSE]].

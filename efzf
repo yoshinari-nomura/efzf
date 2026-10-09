@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+# efzf -- Emacs-based fuzzy finder for the command line
+#
+# Copyright (C) 2026 Yoshinari Nomura
+#
+# Author: Yoshinari Nomura <nom@quickhack.net>
+# URL: https://github.com/yoshinari-nomura/efzf
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+set -eu
+
+################################################################
+## Utility functions
+
+# Quote string for Elisp code
+elisp_string() {
+  local string="$1"
+
+  # Replace \ to \\
+  string="${string//\\/\\\\}"
+
+  # Replace " to \" and enclose with ""
+  printf "\"%s\"" "${string//\"/\\\"}"
+}
+
+################################################################
+## Temporal files
+
+result_file=$(mktemp /tmp/efzf_result.XXXXXX)
+input_file=$(mktemp /tmp/efzf_input.XXXXXX)
+
+cleanup() {
+  rm -f "$result_file" "$input_file"
+}
+trap cleanup EXIT HUP INT TERM
+
+################################################################
+## Parse options
+
+OPT_ACTION="filter"
+OPT_PROMPT="nil"
+
+usage() {
+  echo "Usage: efzf [-a action] [-p prompt]" >&2
+  echo "actions:"
+  echo "  filter (default): select item from stdin."
+  echo "  select: select file in current directory."
+}
+
+while getopts "a:p:" opt; do
+  case "$opt" in
+    a)
+      OPT_ACTION="$OPTARG"
+      ;;
+    p)
+      OPT_PROMPT=$(elisp_string "$OPTARG")
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+# If stdin is PIPE (not TTY), drain it to file.
+if [ ! -t 0 ]; then
+  cat > "$input_file"
+fi
+
+case "$OPT_ACTION" in
+  "filter")
+    action="efzf-action-filter"
+    ;;
+  "select")
+    action="efzf-action-select"
+    ;;
+  *)
+    action="efzf-action-$OPT_ACTION"
+    ;;
+esac
+
+################################################################
+## Setup emacsclient environment
+
+elisp_target_dir=$(elisp_string "${PWD}/")
+elisp_input_file=$(elisp_string "$input_file")
+elisp_output_file=$(elisp_string "$result_file")
+elisp_options="(list :prompt ${OPT_PROMPT})"
+
+code="(efzf-run-action ${elisp_target_dir}
+                       ${elisp_input_file}
+                       ${elisp_output_file}
+                       '${action}
+                       ${elisp_options})"
+
+# At this point,
+# 0: stdin  upstream pipe
+# 1: stdout downstream pipe
+# 2: stderr terminal
+
+exec 3>&1
+exec 0<&2 1>&2
+
+# becomes:
+# 0: terminal
+# 1: terminal
+# 2: terminal
+# 3: downstream pipe
+
+emacsclient -q -t --eval "$code"
+
+################################################################
+## Print result
+
+if [ -s "$result_file" ]; then
+  result=$(cat "$result_file")
+
+  if [ -n "$result" ]; then
+    printf "%s\n" "$result" >&3
+  fi
+fi

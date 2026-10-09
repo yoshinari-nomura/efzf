@@ -1,0 +1,139 @@
+#+TITLE: efzf - Emacs-based Fuzzy Finder for CLI
+#+AUTHOR: Yoshinari Nomura
+#+LANGUAGE: ja
+
+* efzf とは
+
+efzf は，Emacs の強力な補完 UI (Vertico, Orderless など) をターミナル上で
+fzf のように使うためのシェルスクリプトと Emacs Lisp パッケージです．
+
+efzf はバックグラウンドで emacsclient を呼び出してターミナル上に
+一時的な UI を展開し，標準入力や指定されたソースからの項目選択を支援します．
+
+利用例:
+: ps aux | efzf | awk '{print $2}' | xargs kill
+
+efzf:
+#+begin_example
+Usage: efzf [-a action] [-p prompt]
+actions:
+  filter (default): select item from stdin.
+  select: select file in current directory.
+#+end_example
+
+* ファイル一覧
+
+現在，このプロジェクトは，以下の 3つのファイルからなっています．
+
+1) =efzf.el= : Emacs 側の基盤ロジックとアクション群
+2) =efzf= : スタンドアロンで動作する Bash スクリプト
+3) =efzf.zsh= : Zsh のキーバインドとして動作するウィジェット設定の例
+
+* インストールとセットアップ
+** 前提条件
+
+efzf は emacsclient 経由で Emacs を呼び出すため，
+Emacs をサーバーとして起動しておく必要があります．
+=init.el= に以下を追加するか， =emacs --daemon= で Emacs を起動してください．
+
+#+begin_src elisp
+  (require 'server)
+  (unless (server-running-p)
+    (server-start))
+#+end_src
+
+** Emacs Lisp パッケージのインストール
+
+efzf.el は [[https://melpa.org/][MELPA]] への登録を予定しています．
+登録後は，パッケージングシステムを正しく設定していれば，
+=M-x= =package-install= =efzf= でインストールできます．
+詳しくは [[https://github.com/melpa/melpa#usage][MELPA usage]] を参照してください．
+
+それまでは，このリポジトリを clone して =load-path= に追加してください．
+
+#+begin_src elisp
+  (add-to-list 'load-path "/path/to/efzf")
+  (require 'efzf)
+#+end_src
+
+** CLI コマンドのインストール
+
+~M-x efzf-install-scripts~ を実行すると，
+=efzf= と =efzf.zsh= のコピー先を対話的に尋ねてコピーします．
+既定のコピー先は，それぞれ =~/.local/bin/= と =~/.zsh/= です．
+
+コピー後，以下の設定をしてください．
+
+- =efzf= のコピー先に =PATH= を通す
+- =.zshrc= で =efzf.zsh= を読み込む
+  #+begin_src shell
+    source ~/.zsh/efzf.zsh
+  #+end_src
+
+パッケージを更新した場合は， ~M-x efzf-install-scripts~ を再度実行してください．
+
+* 利用方法
+
+** 標準入力からのリストを絞り込み
+
+=fzf= と同じように利用できます．
+: ps aux | efzf | awk '{print $2}' | xargs kill
+
+** Emacs が持つ情報からの絞り込み
+
+パイプの先ではなく，Emacs が持つ特定の action を指定して実行できます．
+現在は，カレントディレクトリのファイルを選択するアクション
+select が実装されています．recentf や project などの情報から絞り込むなどの
+用途が考えられるでしょう．
+
+: vim $(efzf -a select)
+
+また，zsh のウィジェットとしても利用できます．
+=efzf.zsh= 中のサンプルを参照してください．
+
+例えば，history-incremental-search-backward の実装です．
+#+begin_src shell
+  efzf-history-incremental-search-backward() {
+    zle -I
+    local selection=$(fc -nlr 1 | awk '!a[$0]++' | efzf) || return
+    BUFFER="$selection"
+    CURSOR=$#BUFFER
+    zle reset-prompt
+  }
+
+  zle -N efzf-history-incremental-search-backward
+  bindkey '^R' efzf-history-incremental-search-backward
+#+end_src
+
+* 開発者情報
+
+efzf は， =emacsclient -t= を開き， =efzf-run-action= 関数経由で
+=efzf-action-{action}= を呼出し，その結果を出力します．
+
+例えば「最近 Emacs で開いたファイル一覧から選択する」機能を追加したい場合は，
+以下の action を実装します．
+この例では， =recentf-mode= が有効になっている必要があります．
+
+#+begin_src elisp
+  (defun efzf-action-recentf (options)
+    (let ((prompt (or (plist-get options :prompt) "Select file: ")))
+      (condition-case nil
+          (expand-file-name
+           (completing-read prompt recentf-list nil t))
+        (quit nil))))
+#+end_src
+
+そして以下のように使えます．
+: vim $(efzf -a recentf)
+
+action 関数は，以下の環境で実行，また動作が期待されています．
++ =current-buffer= に pipe からの出力が入っています．
+  使うかどうかは，action 次第です．
++ =default-directory= は，efzf のカレントディレクトリです．
++ =options= という 1つの plist を引数として取ります
+  + efzf が action 固有の情報を入れているかもしれません．
++ 関数の値は，1つの文字列か nil です．
+
+* License
+
+GPL-3.0-or-later です．詳しくは [[file:LICENSE][LICENSE]] を参照してください．

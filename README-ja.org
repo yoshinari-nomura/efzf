@@ -1,6 +1,14 @@
 #+TITLE: efzf - Emacs-based Fuzzy Finder for CLI
 #+AUTHOR: Yoshinari Nomura
+#+STARTUP: indent show3levels
 #+LANGUAGE: ja
+#+OPTIONS: H:3 num:2 toc:nil
+#+OPTIONS: ^:nil \n:nil ::t |:t f:t tex:t
+#+OPTIONS: d:nil tags:t
+#+OPTIONS: author:t email:nil creator:nil
+#+OPTIONS: timestamp:nil timestamps:nil
+
+#+html: <a href="https://melpa.org/#/efzf"><img alt="MELPA" src="https://melpa.org/packages/efzf.svg"/></a>
 
 * efzf とは
 
@@ -44,17 +52,10 @@ Emacs をサーバーとして起動しておく必要があります．
 
 ** Emacs Lisp パッケージのインストール
 
-efzf.el は [[https://melpa.org/][MELPA]] への登録を予定しています．
-登録後は，パッケージングシステムを正しく設定していれば，
+efzf.el は [[https://melpa.org/][MELPA]] に登録されています．
+パッケージングシステムを正しく設定している場合，
 =M-x= =package-install= =efzf= でインストールできます．
 詳しくは [[https://github.com/melpa/melpa#usage][MELPA usage]] を参照してください．
-
-それまでは，このリポジトリを clone して =load-path= に追加してください．
-
-#+begin_src elisp
-  (add-to-list 'load-path "/path/to/efzf")
-  (require 'efzf)
-#+end_src
 
 ** CLI コマンドのインストール
 

@@ -18,10 +18,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-efzf-select-widget() {
+efzf-select-file-widget() {
   zle -I
 
-  local selection=$(efzf -a select) || return
+  local selection=$(efzf -a file) || return
+
   if [[ -n "$selection" ]]; then
     LBUFFER+="${(q)selection}"
   fi
@@ -29,8 +30,25 @@ efzf-select-widget() {
   zle reset-prompt
 }
 
-zle -N efzf-select-widget
-# bindkey '^O' efzf-select-widget
+zle -N efzf-select-file-widget
+bindkey '^T' efzf-select-file-widget
+
+efzf-select-directory-widget() {
+  zle -I
+
+  local selection=$(find . -maxdepth 4 -name .git -prune \
+  -o -type d ! -path . -printf '%P/\n' 2>/dev/null | efzf) || return
+
+  if [[ -n "$selection" ]]; then
+    LBUFFER+="${(q)selection}"
+  fi
+
+  zle reset-prompt
+}
+
+zle -N efzf-select-directory-widget
+bindkey '^[c' efzf-select-directory-widget
+
 
 efzf-history-incremental-search-backward() {
   # man zshbuiltins
@@ -48,4 +66,4 @@ efzf-history-incremental-search-backward() {
 }
 
 zle -N efzf-history-incremental-search-backward
-# bindkey '^R' efzf-history-incremental-search-backward
+bindkey '^R' efzf-history-incremental-search-backward

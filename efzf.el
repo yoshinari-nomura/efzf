@@ -39,10 +39,9 @@
 
 ;;; Code:
 
-(require 'cl-lib)
-
 (defvar vertico-count)
 (defvar vertico-resize)
+(defvar orderless-smart-case)
 
 (defconst efzf--source-directory
   (file-name-directory (or load-file-name buffer-file-name))
@@ -55,7 +54,7 @@ The `efzf' script is copied to SCRIPT-DIR and made executable;
 SCRIPT-DIR should be included in your $PATH.  `efzf.zsh' is
 copied to ZSH-DIR; source it from your .zshrc.
 
-Run this commandagain after upgrading efzf."
+Run this command again after upgrading efzf."
   (interactive
    (list (read-directory-name "Install efzf to: " "~/.local/bin/")
          (read-directory-name "Install efzf.zsh to: " "~/.zsh/")))
@@ -77,7 +76,10 @@ TARGET-DIR: working directory (set as `default-directory')
 INPUT-FILE: file containing the contents of stdin
 OUTPUT-FILE: file to write the selection result to
 ACTION-FUNC-SYMBOL: action function to call
-OPTIONS: plist passed to the action function"
+OPTIONS: plist passed to the action function
+
+If OPTIONS has :ignore-case, the case sensitivity of completion is
+bound to its value while ACTION-FUNC-SYMBOL runs."
   (message nil)
   (let ((frame (selected-frame))
         (coding-system-for-write 'utf-8))
@@ -101,7 +103,17 @@ OPTIONS: plist passed to the action function"
 
             (let* ((vertico-count (- (frame-height) 2))
                    (vertico-resize nil)
-                   (result (funcall action-func-symbol options)))
+                   (result
+                    (if (plist-member options :ignore-case)
+                        ;; Orderless ignores `completion-ignore-case'
+                        ;; with smart case.
+                        (let* ((completion-ignore-case
+                                (plist-get options :ignore-case))
+                               (read-file-name-completion-ignore-case
+                                completion-ignore-case)
+                               (orderless-smart-case nil))
+                          (funcall action-func-symbol options))
+                      (funcall action-func-symbol options))))
 
               (when (and (stringp result) (not (string= result "")))
                 (with-temp-file output-file
@@ -118,36 +130,66 @@ OPTIONS: plist passed to the action function"
                        (delete-frame f)))
                    frame))))
 
-(defun efzf-action-select (options)
-  "Read a file name and return its absolute path, or nil if cancelled.
-OPTIONS is a plist; :prompt overrides the default prompt."
-  (let ((prompt (or (plist-get options :prompt) "Select file: ")))
-    (let ((file (condition-case nil
-                    (read-file-name prompt)
-                  (quit nil))))
-      (when (and file (not (string= file "")))
-        (expand-file-name file)))))
+;;; Actions
+;;
+;; An action function takes a plist OPTIONS made from the command
+;; line options of efzf:
+;;
+;;   :prompt STRING      -p     prompt string
+;;   :query STRING       -q     initial input
+;;   :sort BOOL          -s/-S  sort candidates or not (default: nil)
+;;
+;; :ignore-case BOOL (-i/-I) is handled by `efzf-run-action', so
+;; action functions need not care about it.
 
-(defun efzf-action-filter (options)
+(defun efzf--non-empty (string)
+  "Return STRING if it is a non-empty string, otherwise nil."
+  (and (stringp string) (not (string= string "")) string))
+
+(defun efzf-action-pipe (options)
   "Select a line of the current buffer with `completing-read'.
 Each line is split at the first NUL character into a candidate and
 the value to return; a line without NUL is used for both.  Return
 the value of the selected candidate, or nil if cancelled.
-OPTIONS is a plist; :prompt overrides the default prompt."
+OPTIONS is a plist described in the Actions section."
   (let* ((lines (efzf--buffer-to-key-value-alist ?\0))
          (prompt (or (plist-get options :prompt) "Filter: "))
-         (choice nil)
          (completion-table
-          (lambda (string pred action)
-            (if (eq action 'metadata)
-                '(metadata (display-sort-function . identity)
-                           (cycle-sort-function . identity))
-              (complete-with-action action lines string pred)))))
+          (if (plist-get options :sort)
+              lines
+            (lambda (string pred action)
+              (if (eq action 'metadata)
+                  '(metadata (display-sort-function . identity)
+                             (cycle-sort-function . identity))
+                (complete-with-action action lines string pred))))))
     (when lines
-      (setq choice (condition-case nil
-                       (completing-read prompt completion-table nil t)
-                     (quit nil))))
-    (cdr (assoc choice lines))))
+      (let ((choice (condition-case nil
+                        (completing-read prompt completion-table nil t
+                                         (plist-get options :query))
+                      (quit nil))))
+        (cdr (assoc choice lines))))))
+
+(defun efzf-action-file (options)
+  "Read a file name and return its absolute path, or nil if cancelled.
+OPTIONS is a plist described in the Actions section."
+  (let* ((prompt (or (plist-get options :prompt) "Select file: "))
+         (file (condition-case nil
+                   (read-file-name prompt nil nil nil
+                                   (plist-get options :query))
+                 (quit nil))))
+    (when (efzf--non-empty file)
+      (expand-file-name file))))
+
+(defun efzf-action-directory (options)
+  "Read a directory name and return its absolute path, or nil if cancelled.
+OPTIONS is a plist described in the Actions section."
+  (let* ((prompt (or (plist-get options :prompt) "Select directory: "))
+         (dir (condition-case nil
+                  (read-directory-name prompt nil nil t
+                                       (plist-get options :query))
+                (quit nil))))
+    (when (efzf--non-empty dir)
+      (file-name-as-directory (expand-file-name dir)))))
 
 (defun efzf--buffer-to-key-value-alist (delimiter-char &optional key-is-last)
   "Convert each line of the current buffer to a (KEY . VALUE) alist.
@@ -162,9 +204,11 @@ If a line has no delimiter, use the whole line for both KEY and VALUE."
         (let* ((line (buffer-substring-no-properties
                       (line-beginning-position)
                       (line-end-position)))
+               (delim (regexp-quote (string delimiter-char)))
                (pos (if key-is-last
-                        (cl-position delimiter-char line :from-end t)
-                      (cl-position delimiter-char line))))
+                        (and (string-match (concat ".*\\(" delim "\\)") line)
+                             (match-beginning 1))
+                      (string-match delim line))))
           (push
            (if pos
                (if key-is-last

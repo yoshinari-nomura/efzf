@@ -23,10 +23,16 @@ efzf はバックグラウンドで emacsclient を呼び出してターミナ�
 
 efzf:
 #+begin_example
-Usage: efzf [-a action] [-p prompt]
-actions:
-  filter (default): select item from stdin.
-  select: select file in current directory.
+Usage: efzf [-a action] [-p prompt] [-q query] [-s|-S] [-i|-I]
+  -a ACTION  Emacs action (efzf-action-ACTION):
+               pipe (default): select item from stdin
+               file:           select file
+               directory:      select directory
+  -p PROMPT  prompt string
+  -q QUERY   initial query
+  -s / -S    sort / do not sort candidates (default: -S)
+  -i / -I    case-insensitive / case-sensitive matching
+             (default: follow Emacs settings)
 #+end_example
 
 * ファイル一覧
@@ -48,6 +54,44 @@ Emacs をサーバーとして起動しておく必要があります．
   (require 'server)
   (unless (server-running-p)
     (server-start))
+#+end_src
+
+efzf は Emacs の標準の補完 UI でも動作しますが，
+Vertico などの補完 UI と組み合わせて使うことを想定しています．
+以下は =init.el= の設定例です．
+
+#+begin_src elisp
+  (use-package vertico
+    :ensure t
+    :init (vertico-mode))
+
+  (use-package orderless
+    :ensure t
+    :custom
+    (completion-styles '(orderless basic))
+    (completion-category-overrides
+     '((file (styles basic partial-completion)))))
+
+  (use-package marginalia
+    :ensure t
+    :init (marginalia-mode))
+
+  ;; Keep minibuffer history (Vertico uses it for sorting)
+  (use-package savehist
+    :init (savehist-mode))
+#+end_src
+
+テーマが背景色を設定している場合，efzf の画面はその背景色で表示されます．
+端末の背景色を使いたい場合は，以下のように設定してください．
+この設定は， =emacsclient -t= で開く全ての端末フレームに適用されます．
+テーマと端末の背景の明暗が異なる場合は，文字が読みにくくなることがあります．
+
+#+begin_src elisp
+  (defun my-use-terminal-background ()
+    (unless (display-graphic-p)
+      (set-face-background 'default "unspecified-bg" (selected-frame))))
+
+  (add-hook 'server-after-make-frame-hook #'my-use-terminal-background)
 #+end_src
 
 ** Emacs Lisp パッケージのインストール
@@ -80,14 +124,22 @@ efzf.el は [[https://melpa.org/][MELPA]] に登録されています．
 =fzf= と同じように利用できます．
 : ps aux | efzf | awk '{print $2}' | xargs kill
 
+各行を NUL 文字で区切ると，NUL より前が選択肢として表示され，
+NUL より後が選択時に出力されます．NUL を含まない行は，行全体が
+表示され，そのまま出力されます．
+
+: ps aux | awk 'NR>1 {print $11 "\0" $2}' | efzf | xargs kill
+
+同じ選択肢が複数ある場合は，最初の行の値が出力されます．
+
 ** Emacs が持つ情報からの絞り込み
 
 パイプの先ではなく，Emacs が持つ特定の action を指定して実行できます．
-現在は，カレントディレクトリのファイルを選択するアクション
-select が実装されています．recentf や project などの情報から絞り込むなどの
+現在は，ファイルを選択する file と，ディレクトリを選択する
+directory が実装されています．recentf や project などの情報から絞り込むなどの
 用途が考えられるでしょう．
 
-: vim $(efzf -a select)
+: vim $(efzf -a file)
 
 また，zsh のウィジェットとしても利用できます．
 =efzf.zsh= 中のサンプルを参照してください．

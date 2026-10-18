@@ -150,7 +150,9 @@ bound to its value while ACTION-FUNC-SYMBOL runs."
   "Select a line of the current buffer with `completing-read'.
 Each line is split at the first NUL character into a candidate and
 the value to return; a line without NUL is used for both.  Return
-the value of the selected candidate, or nil if cancelled.
+the value of the selected candidate, or nil if cancelled.  If the
+same candidate appears more than once, return the value of the
+first one.
 OPTIONS is a plist described in the Actions section."
   (let* ((lines (efzf--buffer-to-key-value-alist ?\0))
          (prompt (or (plist-get options :prompt) "Filter: "))

@@ -27,10 +27,16 @@ Example:
 
 efzf:
 #+begin_example
-Usage: efzf [-a action] [-p prompt]
-actions:
-  filter (default): select item from stdin.
-  select: select file in current directory.
+Usage: efzf [-a action] [-p prompt] [-q query] [-s|-S] [-i|-I]
+  -a ACTION  Emacs action (efzf-action-ACTION):
+               pipe (default): select item from stdin
+               file:           select file
+               directory:      select directory
+  -p PROMPT  prompt string
+  -q QUERY   initial query
+  -s / -S    sort / no-sort candidates (default: -S)
+  -i / -I    case-insensitive / case-sensitive matching
+             (default: follow Emacs settings)
 #+end_example
 
 * Files
@@ -52,6 +58,45 @@ a server.  Add the following to your =init.el=, or start Emacs with
   (require 'server)
   (unless (server-running-p)
     (server-start))
+#+end_src
+
+efzf works with the default completion UI of Emacs, but it is
+intended to be used with completion UIs such as Vertico.  Here is an
+example of =init.el=:
+
+#+begin_src elisp
+  (use-package vertico
+    :ensure t
+    :init (vertico-mode))
+
+  (use-package orderless
+    :ensure t
+    :custom
+    (completion-styles '(orderless basic))
+    (completion-category-overrides
+     '((file (styles basic partial-completion)))))
+
+  (use-package marginalia
+    :ensure t
+    :init (marginalia-mode))
+
+  ;; Keep minibuffer history (Vertico uses it for sorting)
+  (use-package savehist
+    :init (savehist-mode))
+#+end_src
+
+If your theme sets a background color, the efzf screen is shown with
+that color.  To use the background color of your terminal instead,
+add the following.  This setting applies to all terminal frames
+opened by =emacsclient -t=.  If the brightness of your theme and
+terminal backgrounds differ, text may become hard to read.
+
+#+begin_src elisp
+  (defun my-use-terminal-background ()
+    (unless (display-graphic-p)
+      (set-face-background 'default "unspecified-bg" (selected-frame))))
+
+  (add-hook 'server-after-make-frame-hook #'my-use-terminal-background)
 #+end_src
 
 ** Installing the Emacs Lisp package
@@ -84,14 +129,23 @@ After upgrading the package, run ~M-x efzf-install-scripts~ again.
 You can use it in the same way as =fzf=.
 : ps aux | efzf | awk '{print $2}' | xargs kill
 
+If a line contains a NUL character, the part before the NUL is shown
+as a candidate, and the part after it is printed when selected.  A
+line without NUL is shown and printed as is.
+
+: ps aux | awk 'NR>1 {print $11 "\0" $2}' | efzf | xargs kill
+
+If the same candidate appears more than once, the value of the first
+line is printed.
+
 ** Filtering information held by Emacs
 
 Instead of reading from a pipe, you can specify an action
-implemented in Emacs.  Currently, the =select= action, which selects
-a file in the current directory, is implemented.  Other possible
+implemented in Emacs.  Currently, the =file= and =directory= actions,
+which select a file and a directory respectively, are implemented.  Other possible
 uses include filtering candidates from recentf, project, and so on.
 
-: vim $(efzf -a select)
+: vim $(efzf -a file)
 
 efzf can also be used as a Zsh widget.
 See the examples in =efzf.zsh=.

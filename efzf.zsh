@@ -58,7 +58,7 @@ efzf-history-incremental-search-backward() {
   # awk ... remove duplicated entries
 
   zle -I
-  local selection=$(fc -nlr 1 | awk '!a[$0]++' | efzf) || return
+  local selection=$(fc -nlr 1 | awk '!a[$0]++' | efzf -q "$BUFFER") || return
 
   BUFFER="$selection"
   CURSOR=$#BUFFER

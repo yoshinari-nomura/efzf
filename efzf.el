@@ -70,6 +70,7 @@ Run this command again after upgrading efzf."
       (set-file-modes dst (nth 2 spec))
       (message "Installed %s" (abbreviate-file-name dst)))))
 
+;;;###autoload
 (defun efzf-run-action (target-dir input-file output-file action-func-symbol options)
   "Run ACTION-FUNC-SYMBOL in a full-screen UI for emacsclient.
 TARGET-DIR: working directory (set as `default-directory')
@@ -103,6 +104,8 @@ bound to its value while ACTION-FUNC-SYMBOL runs."
 
             (let* ((vertico-count (- (frame-height) 2))
                    (vertico-resize nil)
+                   ;; In case a minibuffer is active in another frame
+                   (enable-recursive-minibuffers t)
                    (result
                     (if (plist-member options :ignore-case)
                         ;; Orderless ignores `completion-ignore-case'

@@ -1,4 +1,4 @@
-;;; efzf.el --- Emacs-based fuzzy finder for the command line  -*- lexical-binding: t; -*-
+;;; efzf.el --- fzf-like command-line selector using completing-read  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2026 Yoshinari Nomura
 

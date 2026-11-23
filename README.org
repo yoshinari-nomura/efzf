@@ -8,7 +8,7 @@
 #+OPTIONS: author:t email:nil creator:nil
 #+OPTIONS: timestamp:nil timestamps:nil
 
-#+html: <a href="https://melpa.org/#/efzf"><img alt="MELPA" src="https://melpa.org/packages/efzf.svg"/></a>
+#+html: <a href="https://melpa.org/#/efzf"><img alt="MELPA" src="https://melpa.org/packages/efzf-badge.svg"/></a>
 
 [[file:README-ja.org][日本語 (Japanese)]]
 
